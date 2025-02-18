@@ -1,8 +1,9 @@
-package dev.orisha.bulk_transfer_service.services;
+package dev.orisha.bulk_transfer_service.services.impls;
 
 import dev.orisha.bulk_transfer_service.data.enums.TransactionState;
 import dev.orisha.bulk_transfer_service.data.models.Transaction;
 import dev.orisha.bulk_transfer_service.data.repositories.TransactionRepository;
+import dev.orisha.bulk_transfer_service.services.BulkTransferService;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.ss.usermodel.*;
 import org.springframework.data.domain.Page;
@@ -71,7 +72,7 @@ public class BulkTransferServiceImpl implements BulkTransferService {
     }
 
     @Async("taskExecutor")
-    private void processTransactions() {
+    protected void processTransactions() {
 
     }
 

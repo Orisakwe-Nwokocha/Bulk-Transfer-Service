@@ -36,3 +36,29 @@ spring:
         core-size: 10
         max-size: 100
         queue-capacity: 10000
+
+
+nibss:
+  balanceEnquiryUrl: https://apitest.nibss-plc.com.ng/nipservice/v1/nip/balanceenquiry
+  nameEnquiryUrl: https://apitest.nibss-plc.com.ng/nipservice/v1/nip/nameenquiry
+  fundsTransferUrl: https://apitest.nibss-plc.com.ng/nipservice/v1/nip/fundstransfer
+  tsqUrl: https://apitest.nibss-plc.com.ng/nipservice/v1/nip/tsq
+
+  easypay:
+    testMode: true
+    institutionCode: 999998
+    sourceInstitutionCode: 999998
+    billerId: ADC19BDC-7D3A-4C00-4F7B-08DA06684F59
+    originatorAccountName: Dev Test
+    originatorAccountNumber: 112345678
+    originatorBankVerificationNumber: 33333333333
+    originatorKYCLevel: 1
+    mandateReferenceNumber: MA-0112345678-2022315-53097
+    transactionLocation: 1.38716,3.05117
+    clientId: clientId
+    clientSecret: clientSecret
+    tokenUrl: https://apitest.nibss-plc.com.ng/reset
+    balanceEnquiryUrl: https://apitest.nibss-plc.com.ng/nipservice/v1/nip/balanceenquiry
+    nameEnquiryUrl: https://apitest.nibss-plc.com.ng/nipservice/v1/nip/nameenquiry
+    fundsTransferUrl: https://apitest.nibss-plc.com.ng/nipservice/v1/nip/fundstransfer
+    tsqUrl: https://apitest.nibss-plc.com.ng/nipservice/v1/nip/tsq
