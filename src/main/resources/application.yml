@@ -28,7 +28,6 @@ spring:
       max-file-size: 10MB
       max-request-size: 10MB
 
-
   task:
     execution:
       thread-name-prefix: bulk-transfer-service-task-

@@ -1,4 +1,4 @@
-package dev.orisha.bulk_transfer_service.services;
+package dev.orisha.bulk_transfer_service.services.impls;
 
 import dev.orisha.bulk_transfer_service.data.enums.TransactionState;
 import dev.orisha.bulk_transfer_service.data.models.Transaction;
@@ -6,7 +6,8 @@ import dev.orisha.bulk_transfer_service.data.repositories.TransactionRepository;
 import dev.orisha.bulk_transfer_service.dto.requests.FundsTransferRawRequest;
 import dev.orisha.bulk_transfer_service.dto.responses.FundsTransferResponse;
 import dev.orisha.bulk_transfer_service.dto.responses.FundsTransferResponseDto;
-import dev.orisha.bulk_transfer_service.services.impls.AsyncTransferService;
+import dev.orisha.bulk_transfer_service.services.AsyncTransferService;
+import dev.orisha.bulk_transfer_service.services.NibssEasypayInterbankService;
 import lombok.extern.slf4j.Slf4j;
 import org.modelmapper.ModelMapper;
 import org.springframework.beans.factory.annotation.Autowired;
