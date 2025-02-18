@@ -1,0 +1,7 @@
+package dev.orisha.bulk_transfer_service.data.repositories;
+
+import dev.orisha.bulk_transfer_service.data.models.Transaction;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface TransactionRepository extends JpaRepository<Transaction, Long> {
+}
