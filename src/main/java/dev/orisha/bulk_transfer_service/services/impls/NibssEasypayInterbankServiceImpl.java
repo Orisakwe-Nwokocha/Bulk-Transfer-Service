@@ -13,7 +13,6 @@ import dev.orisha.bulk_transfer_service.dto.responses.*;
 import dev.orisha.bulk_transfer_service.services.NibssEasypayInterbankService;
 import lombok.extern.slf4j.Slf4j;
 import org.modelmapper.ModelMapper;
-import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 
 import java.util.UUID;
@@ -40,8 +39,11 @@ public class NibssEasypayInterbankServiceImpl implements NibssEasypayInterbankSe
         responseDto.setStatus(ResponseCodes.FAILED.getCode());
         responseDto.setMessage(ResponseCodes.FAILED.getDescription());
         NibssEasypayNeResponse response = new NibssEasypayNeResponse();
-        String sessionId = UUID.randomUUID().toString();
-        rawRequest.setTransactionId(sessionId);
+        String sessionId = rawRequest.getTransactionId();
+        if (sessionId == null) {
+            sessionId = UUID.randomUUID().toString();
+            rawRequest.setTransactionId(sessionId);
+        }
         if (properties.getTestMode()) {
             response.setResponseCode("00");
             response.setSessionID(sessionId);
@@ -88,13 +90,15 @@ public class NibssEasypayInterbankServiceImpl implements NibssEasypayInterbankSe
                 rawRequest.setTransactionId(UUID.randomUUID().toString());
             }
             if (properties.getTestMode()) {
-                BeanUtils.copyProperties(rawRequest, response);
-                response.setSessionID(rawRequest.getTransactionId());
-                response.setResponseCode("68");
-                responseDto.setStatus("00");
+                FundsTransferResponse fundsTransferData = modelMapper.map(nameEnquiryResponse, FundsTransferResponse.class);
+                fundsTransferData.setPaymentReference(rawRequest.getTransactionId());
+                fundsTransferData.setProcessorReference(rawRequest.getTransactionId());
+                responseDto.setStatus(ResponseCodes.SUCCESS.getCode());
                 responseDto.setMessage(ResponseCodes.SUCCESS.getDescription());
+                responseDto.setData(fundsTransferData);
+                return responseDto;
             }
-        }
+
             rawRequest.setOriginatorAccountNumber(properties.getOriginatorAccountNumber());
             rawRequest.setOriginatorBankVerificationNumber(properties.getOriginatorBankVerificationNumber());
             rawRequest.setOriginatorKYCLevel(properties.getOriginatorKYCLevel());
@@ -124,6 +128,7 @@ public class NibssEasypayInterbankServiceImpl implements NibssEasypayInterbankSe
                 responseDto.setStatus(response.getResponseCode());
                 responseDto.setMessage(response.getResponseCode());
             }
+        }
 
         return responseDto;
     }
