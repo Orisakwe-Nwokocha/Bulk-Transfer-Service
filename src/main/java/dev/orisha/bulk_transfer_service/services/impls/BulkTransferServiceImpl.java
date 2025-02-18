@@ -16,6 +16,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
@@ -40,18 +41,98 @@ public class BulkTransferServiceImpl implements BulkTransferService {
     }
 
     @Override
+    @Transactional
     public void performBulkTransfer(MultipartFile multipartFile, String batchId) {
         if (batchId == null) {
             batchId = generateBatchId();
         }
 
-        log.info("Bulk transfer started with id {}", batchId);
+        log.info("Bulk transfer process started with batch ID: {}", batchId);
+        List<Transaction> transactions = extractTransactionsFromFile(multipartFile, batchId);
 
+        if (transactions.isEmpty()) {
+            log.warn("No transactions extracted from file for batch ID: {}", batchId);
+            return;
+        }
+
+        log.info("Saving {} transactions to database for batch ID: {}", transactions.size(), batchId);
+        transactionRepository.saveAll(transactions);
+
+        log.info("Initiating async transaction processing for batch ID: {}", batchId);
+        processTransactions(batchId);
+    }
+
+    @Async("taskExecutor")
+    protected void processTransactions(String batchId) {
+        log.info("Transaction processing started for batchId: {}", batchId);
+
+        Pageable pageable = PageRequest.of(0, 2);
+        Page<Transaction> transactionPage = transactionRepository.findAllByBatchId(batchId, pageable);
+        while (true) {
+            List<Transaction> transactions = transactionPage.getContent();
+            if (transactions.isEmpty()) {
+                log.info("No transactions extracted from the database for batch ID: {}", batchId);
+                break;
+            }
+            transactions.forEach(this::processSingleTransaction);
+            if (!transactionPage.hasNext()) {
+                log.info("No more transactions to process for batchId: {}", batchId);
+                break;
+            }
+
+            pageable = transactionPage.nextPageable();
+            transactionPage = transactionRepository.findAllByBatchId(batchId, pageable);
+        }
+    }
+
+    private void processSingleTransaction(Transaction transaction) {
+        try {
+            FundsTransferRawRequest transferRawRequest = modelMapper.map(transaction, FundsTransferRawRequest.class);
+            transferRawRequest.setTransactionId(transaction.getPaymentReference());
+
+            FundsTransferResponseDto responseDto = nibssEasypayService.fundsTransfer(transferRawRequest);
+
+            if (responseDto == null) {
+                log.warn("Received null response for transaction {}", transaction.getPaymentReference());
+                transaction.setTransactionState(TransactionState.FAILED);
+            } else {
+                FundsTransferResponse data = responseDto.getData();
+                if (data != null) {
+                    log.info("Transaction {} processed: {}", transaction.getPaymentReference(), data);
+                    String paymentReference = data.getSessionID() != null ? data.getSessionID() : transaction.getPaymentReference();
+                    String processorReference = data.getProcessorReference() != null ? data.getProcessorReference() : transaction.getProcessorReference();
+                    transaction.setPaymentReference(paymentReference);
+                    transaction.setProcessorReference(processorReference);
+                }
+                transaction.setTransactionState("00".equals(responseDto.getStatus()) ? TransactionState.PAID : TransactionState.FAILED);
+            }
+
+            transactionRepository.save(transaction);
+            log.info("Transaction {} updated with state {}", transaction.getPaymentReference(), transaction.getTransactionState());
+
+        } catch (Exception e) {
+            log.error("Error processing transaction {}: {}", transaction.getPaymentReference(), e.getMessage(), e);
+            transaction.setTransactionState(TransactionState.FAILED);
+            transactionRepository.save(transaction);
+        }
+    }
+
+    private static String getCellValue(Row row, int columnIndex) {
+        Cell cell = row.getCell(columnIndex);
+        if (cell == null) return "";
+        return switch (cell.getCellType()) {
+            case STRING -> cell.getStringCellValue();
+            case NUMERIC -> String.valueOf(cell.getNumericCellValue());
+            case BOOLEAN -> String.valueOf(cell.getBooleanCellValue());
+            case FORMULA -> cell.getCellFormula();
+            default -> "";
+        };
+    }
+
+    private List<Transaction> extractTransactionsFromFile(MultipartFile multipartFile, String batchId) {
         List<Transaction> transactions = new ArrayList<>();
-
-        try(Workbook workbook = WorkbookFactory.create(multipartFile.getInputStream())) {
+        try (Workbook workbook = WorkbookFactory.create(multipartFile.getInputStream())) {
             Sheet sheet = workbook.getSheetAt(0);
-
             for (Row row : sheet) {
                 if (row.getRowNum() == 0) {
                     continue;
@@ -74,69 +155,10 @@ public class BulkTransferServiceImpl implements BulkTransferService {
                 transactions.add(transaction);
             }
         } catch (Exception e) {
-            throw new RuntimeException(e);
+            log.error("Error extracting transactions from file for batch ID: {}", batchId, e);
         }
-
-        transactionRepository.saveAll(transactions);
-        transactionRepository.flush();
-        processTransactions(batchId);
+        return transactions;
     }
-
-    @Async("taskExecutor")
-    protected void processTransactions(String batchId) {
-        Pageable pageable = PageRequest.of(0, 2);
-        Page<Transaction> transactionPage = transactionRepository.findAllByBatchId(batchId, pageable);
-        while (true) {
-            List<Transaction> transactions = transactionPage.getContent();
-            if (transactions.isEmpty()) {
-                break;
-            }
-
-            for (Transaction transaction : transactions) {
-                FundsTransferRawRequest transferRawRequest = modelMapper.map(transaction, FundsTransferRawRequest.class);
-                transferRawRequest.setTransactionId(transaction.getPaymentReference());
-                FundsTransferResponseDto fundsTransferResponseDto = nibssEasypayService.fundsTransfer(transferRawRequest);
-                if (fundsTransferResponseDto != null) {
-                    FundsTransferResponse data = fundsTransferResponseDto.getData();
-                    if (data != null) {
-                        System.out.println(data);
-                        if (data.getSessionID() != null) {
-                            transaction.setPaymentReference(data.getSessionID());
-                        }
-                        if (data.getProcessorReference() != null) {
-                            transaction.setProcessorReference(data.getProcessorReference());
-                        }
-                    }
-                    if ("00".equals(fundsTransferResponseDto.getStatus())) {
-                        transaction.setTransactionState(TransactionState.PAID);
-                    } else {
-                        transaction.setTransactionState(TransactionState.FAILED);
-                    }
-                    transactionRepository.save(transaction);
-                }
-            }
-
-            if (!transactionPage.hasNext()) {
-                break;
-            }
-
-            pageable = transactionPage.nextPageable();
-            transactionPage = transactionRepository.findAllByBatchId(batchId, pageable);
-        }
-    }
-
-    private static String getCellValue(Row row, int columnIndex) {
-        Cell cell = row.getCell(columnIndex);
-        if (cell == null) return "";
-        return switch (cell.getCellType()) {
-            case STRING -> cell.getStringCellValue();
-            case NUMERIC -> String.valueOf(cell.getNumericCellValue());
-            case BOOLEAN -> String.valueOf(cell.getBooleanCellValue());
-            case FORMULA -> cell.getCellFormula();
-            default -> "";
-        };
-    }
-
 
     public static String generateBatchId() {
         return "BATCH-" + UUID.randomUUID();

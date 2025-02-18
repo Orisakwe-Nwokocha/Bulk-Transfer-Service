@@ -17,9 +17,7 @@ class BulkTransferServiceTest {
     @Test
     void performBulkTransfer() {
         String transactions_excel_sheet = "/data/transactions.xlsx";
-        try(InputStream inputStream = BulkTransferServiceTest.class.getResourceAsStream(transactions_excel_sheet)) {
-//            ClassPathResource resource = new ClassPathResource("transactions.xlsx");
-//            InputStream inputStream = resource.getInputStream();
+        try (InputStream inputStream = BulkTransferServiceTest.class.getResourceAsStream(transactions_excel_sheet)) {
             MultipartFile multipartFile = new MockMultipartFile("transactions.xlsx", inputStream);
             bulkTransferService.performBulkTransfer(multipartFile, null);
         } catch (Exception e) {
