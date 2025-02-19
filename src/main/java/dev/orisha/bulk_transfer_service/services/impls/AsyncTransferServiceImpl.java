@@ -36,12 +36,13 @@ public class AsyncTransferServiceImpl implements AsyncTransferService {
     }
 
     @Override
-    @Async("taskExecutor")
+//    @Async("taskExecutor")
+    @Async
     public void processTransactions(String batchId) {
         System.out.println(Thread.currentThread().getName());
         log.info("Processing transactions in thread: {}", Thread.currentThread().getName());
 
-        log.info("Transaction processing started for batchId: {}", batchId);
+        log.info("Initiating async transaction processing for batch ID: {}", batchId);
 
         Pageable pageable = PageRequest.of(0, 2);
         Page<Transaction> transactionPage = transactionRepository.findAllByBatchId(batchId, pageable);
@@ -52,6 +53,7 @@ public class AsyncTransferServiceImpl implements AsyncTransferService {
                 log.info("No transactions extracted from the database for batch ID: {}", batchId);
                 break;
             }
+
             transactions.forEach(this::processSingleTransaction);
             if (!transactionPage.hasNext()) {
                 log.info("No more transactions to process for batchId: {}", batchId);

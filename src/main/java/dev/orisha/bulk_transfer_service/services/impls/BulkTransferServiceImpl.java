@@ -56,7 +56,6 @@ public class BulkTransferServiceImpl implements BulkTransferService {
         log.info("Saving {} transactions to database for batch ID: {}", transactions.size(), batchId);
         transactionRepository.saveAll(transactions);
 
-        log.info("Initiating async transaction processing for batch ID: {}", batchId);
         asyncTransferService.processTransactions(batchId);
 
         apiResponse.setStatus(ResponseCodes.SUCCESS.getCode());
