@@ -11,6 +11,7 @@ import dev.orisha.bulk_transfer_service.services.NibssEasypayInterbankService;
 import lombok.extern.slf4j.Slf4j;
 import org.modelmapper.ModelMapper;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -36,64 +37,91 @@ public class AsyncTransferServiceImpl implements AsyncTransferService {
     }
 
     @Override
-//    @Async("taskExecutor")
     @Async
+//    @Async("taskExecutor")
     public void processTransactions(String batchId) {
         System.out.println(Thread.currentThread().getName());
         log.info("Processing transactions in thread: {}", Thread.currentThread().getName());
-
         log.info("Initiating async transaction processing for batch ID: {}", batchId);
 
         Pageable pageable = PageRequest.of(0, 2);
-        Page<Transaction> transactionPage = transactionRepository.findAllByBatchId(batchId, pageable);
-        while (true) {
-            log.info("Transaction processing started for: {}", transactionPage);
+        Page<Transaction> transactionPage = transactionRepository.findAllByBatchIdAndTransactionState(batchId, TransactionState.PENDING, pageable);
+
+        while (!transactionPage.isEmpty()) {
             List<Transaction> transactions = transactionPage.getContent();
-            if (transactions.isEmpty()) {
-                log.info("No transactions extracted from the database for batch ID: {}", batchId);
-                break;
+
+            for (Transaction transaction : transactions) {
+                try {
+                    transaction.setTransactionState(TransactionState.IN_PROGRESS);
+                    transactionRepository.save(transaction);
+
+                    processSingleTransaction(transaction);
+                } catch (Exception e) {
+                    log.error("Error updating transaction {} to IN_PROGRESS: {}", transaction.getPaymentReference(), e.getMessage(), e);
+                }
             }
 
-            transactions.forEach(this::processSingleTransaction);
             if (!transactionPage.hasNext()) {
                 log.info("No more transactions to process for batchId: {}", batchId);
                 break;
             }
-
             pageable = transactionPage.nextPageable();
-            transactionPage = transactionRepository.findAllByBatchId(batchId, pageable);
+            transactionPage = transactionRepository.findAllByBatchIdAndTransactionState(batchId, TransactionState.PENDING, pageable);
         }
+
+        log.info("Finished processing transactions for batch ID: {}", batchId);
     }
 
     private void processSingleTransaction(Transaction transaction) {
-        try {
-            FundsTransferRawRequest transferRawRequest = modelMapper.map(transaction, FundsTransferRawRequest.class);
-            transferRawRequest.setTransactionId(transaction.getPaymentReference());
+        int maxRetries = 3;
+        int attempt = 0;
 
-            FundsTransferResponseDto responseDto = nibssEasypayService.fundsTransfer(transferRawRequest);
-
-            if (responseDto == null) {
-                log.warn("Received null response for transaction {}", transaction.getPaymentReference());
-                transaction.setTransactionState(TransactionState.FAILED);
-            } else {
-                FundsTransferResponse data = responseDto.getData();
-                if (data != null) {
-                    log.info("Transaction {} processed: {}", transaction.getPaymentReference(), data);
-                    String paymentReference = data.getSessionID() != null ? data.getSessionID() : transaction.getPaymentReference();
-                    String processorReference = data.getProcessorReference() != null ? data.getProcessorReference() : transaction.getProcessorReference();
-                    transaction.setPaymentReference(paymentReference);
-                    transaction.setProcessorReference(processorReference);
+        while (true) {
+            try {
+                if (transaction.getTransactionState() != TransactionState.IN_PROGRESS) {
+                    return;
                 }
-                transaction.setTransactionState("00".equals(responseDto.getStatus()) ? TransactionState.PAID : TransactionState.FAILED);
+
+                FundsTransferRawRequest transferRawRequest = modelMapper.map(transaction, FundsTransferRawRequest.class);
+                transferRawRequest.setTransactionId(transaction.getPaymentReference());
+
+                FundsTransferResponseDto responseDto = nibssEasypayService.fundsTransfer(transferRawRequest);
+
+                if (responseDto == null) {
+                    log.warn("Received null response for transaction {}", transaction.getPaymentReference());
+                    transaction.setTransactionState(TransactionState.FAILED);
+                } else {
+                    FundsTransferResponse data = responseDto.getData();
+                    if (data != null) {
+                        log.info("Transaction {} processed: {}", transaction.getPaymentReference(), data);
+                        transaction.setPaymentReference(data.getSessionID() != null ? data.getSessionID() : transaction.getPaymentReference());
+                        transaction.setProcessorReference(data.getProcessorReference() != null ? data.getProcessorReference() : transaction.getProcessorReference());
+                    }
+                    transaction.setTransactionState("00".equals(responseDto.getStatus()) ? TransactionState.PAID : TransactionState.FAILED);
+                }
+
+                transactionRepository.save(transaction);
+                return;
+
+            } catch (OptimisticLockingFailureException e) {
+                attempt++;
+                log.warn("Optimistic lock failure for transaction {}. Retrying {}/{}", transaction.getPaymentReference(), attempt, maxRetries);
+
+                if (attempt < maxRetries) {
+                    transaction = transactionRepository.findById(transaction.getId()).orElse(transaction);
+                } else {
+                    log.error("Max retries reached for transaction {}. Marking as FAILED.", transaction.getPaymentReference());
+                    transaction.setTransactionState(TransactionState.FAILED);
+                    transactionRepository.save(transaction);
+                    return;
+                }
+            } catch (Exception e) {
+                log.error("Error processing transaction {}: {}", transaction.getPaymentReference(), e.getMessage(), e);
+                transaction.setTransactionState(TransactionState.FAILED);
+                transactionRepository.save(transaction);
+                return;
             }
-
-            transactionRepository.save(transaction);
-            log.info("Transaction {} updated with state {}", transaction.getPaymentReference(), transaction.getTransactionState());
-
-        } catch (Exception e) {
-            log.error("Error processing transaction {}: {}", transaction.getPaymentReference(), e.getMessage(), e);
-            transaction.setTransactionState(TransactionState.FAILED);
-            transactionRepository.save(transaction);
         }
     }
+
 }

@@ -62,4 +62,7 @@ public class Transaction {
     @UpdateTimestamp
     private Instant dateModified;
 
+    @Version
+    private Long version;
+
 }

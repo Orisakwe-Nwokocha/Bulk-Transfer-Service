@@ -9,11 +9,13 @@ import dev.orisha.bulk_transfer_service.dto.responses.BulkTransferResponse;
 import dev.orisha.bulk_transfer_service.services.AsyncTransferService;
 import dev.orisha.bulk_transfer_service.services.BulkTransferService;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.poi.EncryptedDocumentException;
 import org.apache.poi.ss.usermodel.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
@@ -107,7 +109,7 @@ public class BulkTransferServiceImpl implements BulkTransferService {
             }
             return transactions;
 
-        } catch (Exception e) {
+        } catch (IOException | EncryptedDocumentException | NumberFormatException e) {
             log.error("Error extracting transactions from file for batch ID: {}", batchId, e);
         }
         return null;
