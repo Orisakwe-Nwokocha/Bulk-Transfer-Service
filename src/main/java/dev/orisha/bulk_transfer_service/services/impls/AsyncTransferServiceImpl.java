@@ -46,26 +46,15 @@ public class AsyncTransferServiceImpl implements AsyncTransferService {
 
         Pageable pageable = PageRequest.of(0, 2);
         Page<Transaction> transactionPage = transactionRepository.findAllByBatchIdAndTransactionState(batchId, TransactionState.PENDING, pageable);
-
         while (!transactionPage.isEmpty()) {
             List<Transaction> transactions = transactionPage.getContent();
-
-            for (Transaction transaction : transactions) {
-                try {
-                    transaction.setTransactionState(TransactionState.IN_PROGRESS);
-                    transactionRepository.save(transaction);
-
-                    processSingleTransaction(transaction);
-                } catch (Exception e) {
-                    log.error("Error updating transaction {} to IN_PROGRESS: {}", transaction.getPaymentReference(), e.getMessage(), e);
-                }
-            }
+            transactions.parallelStream().forEach(this::processSingleTransaction);
 
             if (!transactionPage.hasNext()) {
                 log.info("No more transactions to process for batchId: {}", batchId);
                 break;
             }
-            pageable = transactionPage.nextPageable();
+//            pageable = transactionPage.nextPageable();
             transactionPage = transactionRepository.findAllByBatchIdAndTransactionState(batchId, TransactionState.PENDING, pageable);
         }
 
@@ -76,25 +65,29 @@ public class AsyncTransferServiceImpl implements AsyncTransferService {
         int maxRetries = 3;
         int attempt = 0;
 
+        System.out.println(Thread.currentThread().getName());
+        log.info("Processing transaction {} in thread: {}", transaction.getPaymentReference(), Thread.currentThread().getName());
+
         while (true) {
+            String paymentReference = transaction.getPaymentReference();
             try {
-                if (transaction.getTransactionState() != TransactionState.IN_PROGRESS) {
+                if (transaction.getTransactionState() == TransactionState.PAID || transaction.getTransactionState() == TransactionState.FAILED) {
                     return;
                 }
 
                 FundsTransferRawRequest transferRawRequest = modelMapper.map(transaction, FundsTransferRawRequest.class);
-                transferRawRequest.setTransactionId(transaction.getPaymentReference());
+                transferRawRequest.setTransactionId(paymentReference);
 
                 FundsTransferResponseDto responseDto = nibssEasypayService.fundsTransfer(transferRawRequest);
 
                 if (responseDto == null) {
-                    log.warn("Received null response for transaction {}", transaction.getPaymentReference());
+                    log.warn("Null response for transaction {}", paymentReference);
                     transaction.setTransactionState(TransactionState.FAILED);
                 } else {
                     FundsTransferResponse data = responseDto.getData();
                     if (data != null) {
-                        log.info("Transaction {} processed: {}", transaction.getPaymentReference(), data);
-                        transaction.setPaymentReference(data.getSessionID() != null ? data.getSessionID() : transaction.getPaymentReference());
+                        log.info("Transaction {} processed: {}", paymentReference, data);
+                        transaction.setPaymentReference(data.getSessionID() != null ? data.getSessionID() : paymentReference);
                         transaction.setProcessorReference(data.getProcessorReference() != null ? data.getProcessorReference() : transaction.getProcessorReference());
                     }
                     transaction.setTransactionState("00".equals(responseDto.getStatus()) ? TransactionState.PAID : TransactionState.FAILED);
@@ -105,18 +98,22 @@ public class AsyncTransferServiceImpl implements AsyncTransferService {
 
             } catch (OptimisticLockingFailureException e) {
                 attempt++;
-                log.warn("Optimistic lock failure for transaction {}. Retrying {}/{}", transaction.getPaymentReference(), attempt, maxRetries);
+                log.warn("Optimistic lock failure for transaction {}. Retrying {}/{}", paymentReference, attempt, maxRetries);
 
                 if (attempt < maxRetries) {
-                    transaction = transactionRepository.findById(transaction.getId()).orElse(transaction);
+                    transaction = transactionRepository.findById(transaction.getId()).orElse(null);
+                    if (transaction == null) {
+                        log.error("Transaction {} not found during retry. Skipping.", paymentReference);
+                        return;
+                    }
                 } else {
-                    log.error("Max retries reached for transaction {}. Marking as FAILED.", transaction.getPaymentReference());
+                    log.error("Max retries reached for transaction {}. Marking as FAILED.", paymentReference);
                     transaction.setTransactionState(TransactionState.FAILED);
                     transactionRepository.save(transaction);
                     return;
                 }
             } catch (Exception e) {
-                log.error("Error processing transaction {}: {}", transaction.getPaymentReference(), e.getMessage(), e);
+                log.error("Error processing transaction {}: {}", paymentReference, e.getMessage(), e);
                 transaction.setTransactionState(TransactionState.FAILED);
                 transactionRepository.save(transaction);
                 return;
