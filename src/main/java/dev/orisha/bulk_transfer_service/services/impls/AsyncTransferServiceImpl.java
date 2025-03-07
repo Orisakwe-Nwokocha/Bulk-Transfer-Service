@@ -44,7 +44,7 @@ public class AsyncTransferServiceImpl implements AsyncTransferService {
         log.info("Processing transactions in thread: {}", Thread.currentThread().getName());
         log.info("Initiating async transaction processing for batch ID: {}", batchId);
 
-        Pageable pageable = PageRequest.of(0, 2);
+        Pageable pageable = PageRequest.of(0, 3);
         Page<Transaction> transactionPage = transactionRepository.findAllByBatchIdAndTransactionState(batchId, TransactionState.PENDING, pageable);
         while (!transactionPage.isEmpty()) {
             List<Transaction> transactions = transactionPage.getContent();
