@@ -48,8 +48,12 @@ public class BulkTransferServiceImpl implements BulkTransferService {
             batchId = generateBatchId();
         }
 
-        System.out.println(Thread.currentThread().getName());
-        log.info("Processing transactions in thread: {}", Thread.currentThread().getName());
+        boolean batchExists = transactionRepository.existsByBatchId(batchId);
+        if (batchExists) {
+            log.warn("Batch {} has already been processed, skipping re-processing.", batchId);
+            apiResponse.setMessage("This batch has already been processed");
+            return apiResponse;
+        }
 
         log.info("Bulk transfer process started with batch ID: {}", batchId);
 
@@ -60,7 +64,7 @@ public class BulkTransferServiceImpl implements BulkTransferService {
                 Transaction transaction = mapRowToTransaction(row, finalBatchId);
                 batch.add(transaction);
 
-                if (batch.size() == 500) {
+                if (batch.size() == 2) {
                     saveTransactionsInBatches(batch);
                     batch.clear();
                 }

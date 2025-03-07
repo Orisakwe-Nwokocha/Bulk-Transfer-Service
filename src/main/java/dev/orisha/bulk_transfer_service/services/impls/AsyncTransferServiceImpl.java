@@ -72,6 +72,7 @@ public class AsyncTransferServiceImpl implements AsyncTransferService {
             String paymentReference = transaction.getPaymentReference();
             try {
                 if (transaction.getTransactionState() == TransactionState.PAID || transaction.getTransactionState() == TransactionState.FAILED) {
+                    log.info("Transaction {} already processed. Skipping...", transaction.getPaymentReference());
                     return;
                 }
 

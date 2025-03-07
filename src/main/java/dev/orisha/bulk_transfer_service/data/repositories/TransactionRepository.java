@@ -10,5 +10,10 @@ public interface TransactionRepository extends JpaRepository<Transaction, Long> 
 
 //    Page<Transaction> findAllByBatchId(String batchId, Pageable pageable);
 
-    Page<Transaction> findAllByBatchIdAndTransactionState(String batchId, TransactionState transactionState, Pageable pageable);
+    boolean existsByBatchId(String batchId);
+
+    Page<Transaction> findAllByBatchIdAndTransactionState(String batchId,
+                                                          TransactionState transactionState,
+                                                          Pageable pageable);
+
 }
