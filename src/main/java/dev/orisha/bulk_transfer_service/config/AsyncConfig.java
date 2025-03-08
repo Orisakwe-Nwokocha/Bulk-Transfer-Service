@@ -31,6 +31,8 @@ public class AsyncConfig implements AsyncConfigurer {
         executor.setMaxPoolSize(taskExecutionProperties.getPool().getMaxSize());
         executor.setQueueCapacity(taskExecutionProperties.getPool().getQueueCapacity());
         executor.setThreadNamePrefix(taskExecutionProperties.getThreadNamePrefix());
+        int seconds = (int) taskExecutionProperties.getPool().getKeepAlive().getSeconds();
+        executor.setKeepAliveSeconds(seconds);
         executor.initialize();
         return executor;
     }
@@ -39,4 +41,5 @@ public class AsyncConfig implements AsyncConfigurer {
     public AsyncUncaughtExceptionHandler getAsyncUncaughtExceptionHandler() {
         return (throwable, method, params) -> log.error("Unexpected async error in method: {}", method.getName(), throwable);
     }
+
 }

@@ -31,11 +31,12 @@ spring:
 
   task:
     execution:
-      thread-name-prefix: bulk-transfer-service-task-
+      thread-name-prefix: bulk-transfer-service-async-task-
       pool:
-        core-size: 10
-        max-size: 100
-        queue-capacity: 10000
+        core-size: 5
+        max-size: 10
+        queue-capacity: 50
+        keep-alive: 120s
 
 
 nibss:
