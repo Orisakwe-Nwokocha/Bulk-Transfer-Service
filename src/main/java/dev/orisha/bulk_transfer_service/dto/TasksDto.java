@@ -1,4 +1,4 @@
-package dev.orisha.bulk_transfer_service.controller;
+package dev.orisha.bulk_transfer_service.dto;
 
 import lombok.Data;
 import lombok.NoArgsConstructor;

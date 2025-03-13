@@ -1,5 +1,6 @@
-package dev.orisha.bulk_transfer_service.controller;
+package dev.orisha.bulk_transfer_service.services;
 
+import dev.orisha.bulk_transfer_service.dto.TasksDto;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
@@ -33,6 +34,7 @@ public class AsyncService {
     }
 
     public void resetCompletedTasks() {
+        counter.set(0);
         completedTasks.clear();
     }
 

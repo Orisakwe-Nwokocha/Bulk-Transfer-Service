@@ -1,5 +1,7 @@
 package dev.orisha.bulk_transfer_service.controller;
 
+import dev.orisha.bulk_transfer_service.dto.TasksDto;
+import dev.orisha.bulk_transfer_service.services.AsyncService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -10,7 +12,6 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
 
 @RestController
@@ -21,14 +22,17 @@ public class AsyncController {
     private final ThreadPoolTaskExecutor executor;
     private final List<String> failedTasks = new ArrayList<>();
 
-    public AsyncController(AsyncService asyncService, @Qualifier("taskExecutor") Executor executor) {
+    public AsyncController(final AsyncService asyncService,
+                           final @Qualifier("taskExecutor") ThreadPoolTaskExecutor executor) {
         this.asyncService = asyncService;
-        this.executor = (ThreadPoolTaskExecutor) executor;
+        this.executor = executor;
     }
 
     @GetMapping("/start")
     public String startAsyncTasks(@RequestParam(defaultValue = "100") int num) {
+        resetCompletedTasks();
         log.info("REST request to start async {} tasks", num);
+        long start = System.nanoTime();
 
         int counter = 1;
         try {
@@ -45,7 +49,10 @@ public class AsyncController {
             }
         }
 
-        return "Request received";
+        long end = System.nanoTime();
+        long elapsed = end - start;
+
+        return "Request processed in %sms or %ss".formatted((elapsed / 1_000_000), elapsed / 1_000_000_000);
     }
 
     @GetMapping

@@ -14,6 +14,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.interceptor.TransactionAspectSupport;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
@@ -75,6 +76,7 @@ public class BulkTransferServiceImpl implements BulkTransferService {
             }
         } catch (Exception e) {
             log.error("Error reading file for batch ID: {}", batchId, e);
+            TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
             apiResponse.setMessage("Failed to process file");
             return apiResponse;
         }
